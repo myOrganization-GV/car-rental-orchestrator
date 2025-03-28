@@ -1,12 +1,24 @@
 package com.gui.car_rental_orchestrator.services;
 
+import com.gui.car_rental_common.commands.BookingCreationCommand;
+import com.gui.car_rental_common.commands.GetUserInfoCommand;
 import com.gui.car_rental_common.commands.ReserveCarCommand;
+import com.gui.car_rental_common.dtos.BookingDto;
+import com.gui.car_rental_common.events.booking.BookingCreatedEvent;
+import com.gui.car_rental_common.events.booking.BookingCreationFailedEvent;
+import com.gui.car_rental_common.events.inventory.CarReservationFailedEvent;
+import com.gui.car_rental_common.events.inventory.CarReservedEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaHandler;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import java.util.UUID;
 @Service
+@KafkaListener(topics = {"booking-service-events" , "inventory-service-events"},groupId = "orchestrator-group")
 public class RentalSagaOrchestratorService {
-
+    private static final Logger logger = LoggerFactory.getLogger(RentalSagaOrchestratorService.class);
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -14,20 +26,32 @@ public class RentalSagaOrchestratorService {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    public void startCarReservationSaga(UUID carId) {
-        // 1. Generate a unique Saga Transaction ID
-        String sagaTransactionId = UUID.randomUUID().toString();
-        System.out.println("Starting Car Reservation Saga with ID: " + sagaTransactionId);
-
-        // 2. Create the ReserveCarCommand
-        ReserveCarCommand reserveCarCommand = new ReserveCarCommand(carId, sagaTransactionId);
-
-        // 3. Send the ReserveCarCommand to the Inventory Service
-        kafkaTemplate.send("rental-saga-commands", reserveCarCommand); // Use the command topic
-
-        System.out.println("Sent ReserveCarCommand for Car ID: " + carId + ", Saga ID: " + sagaTransactionId);
-
-        // In the next steps, we'll listen for the CarReservedEvent or CarReservationFailedEvent
+    public void startCarReservationSaga(BookingDto bookingDto) {
+        UUID sagaTransactionId = UUID.randomUUID();
+        logger.info("Starting Car Reservation Saga with ID: {}", sagaTransactionId);
+        System.out.println("sout: saga id "+ sagaTransactionId);
+        ReserveCarCommand reserveCarCommand = new ReserveCarCommand(bookingDto ,sagaTransactionId);
+        kafkaTemplate.send("rental-saga-inventory-commands", reserveCarCommand);
+        logger.info("Sent ReserveCarCommand with Saga ID: {}", sagaTransactionId);
     }
 
+
+    //events
+    @KafkaHandler
+    public void handleBookingCreatedEvent(BookingCreatedEvent event){
+        logger.info("Processing BookingCreatedEvent for Saga ID: {}", event.getSagaTransactionId());
+        logger.info("BookingCreatedEvent for Saga ID: {} received successfully fetching user details...", event.getSagaTransactionId());
+    }
+    @KafkaHandler
+    public void handleCarReservationFailedEvent(CarReservationFailedEvent event){
+        logger.info("CAR RESERVATION FAILED");
+    }
+    @KafkaHandler
+    public void handleCarReservedEvent(CarReservedEvent event) {
+        logger.info("Received CarReservedEvent for Saga ID: {}", event.getSagaTransactionId());
+        logger.info("Starting next saga step, create new booking for Saga ID: {}", event.getSagaTransactionId());
+        BookingCreationCommand bookingCreationCommand = new BookingCreationCommand(event.getSagaTransactionId(), event.getBookingDto(),event.getPricePerDay());
+        kafkaTemplate.send("rental-saga-booking-commands", bookingCreationCommand);
+        logger.info("Sent BookingCreationCommand with Saga ID: {}", event.getSagaTransactionId());
+    }
 }
