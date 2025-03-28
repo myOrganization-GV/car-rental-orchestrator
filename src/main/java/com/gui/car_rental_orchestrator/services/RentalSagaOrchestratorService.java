@@ -1,11 +1,13 @@
 package com.gui.car_rental_orchestrator.services;
 
 import com.gui.car_rental_common.commands.BookingCreationCommand;
+import com.gui.car_rental_common.commands.CancelCarReservationCommand;
 import com.gui.car_rental_common.commands.GetUserInfoCommand;
 import com.gui.car_rental_common.commands.ReserveCarCommand;
 import com.gui.car_rental_common.dtos.BookingDto;
 import com.gui.car_rental_common.events.booking.BookingCreatedEvent;
 import com.gui.car_rental_common.events.booking.BookingCreationFailedEvent;
+import com.gui.car_rental_common.events.inventory.CarReservationCancelledEvent;
 import com.gui.car_rental_common.events.inventory.CarReservationFailedEvent;
 import com.gui.car_rental_common.events.inventory.CarReservedEvent;
 import org.slf4j.Logger;
@@ -53,5 +55,27 @@ public class RentalSagaOrchestratorService {
         BookingCreationCommand bookingCreationCommand = new BookingCreationCommand(event.getSagaTransactionId(), event.getBookingDto(),event.getPricePerDay());
         kafkaTemplate.send("rental-saga-booking-commands", bookingCreationCommand);
         logger.info("Sent BookingCreationCommand with Saga ID: {}", event.getSagaTransactionId());
+    }
+
+    @KafkaHandler
+    public void handleCarReservationCancelledEvent(CarReservationCancelledEvent event) {
+        logger.info("Received CarReservationCancelledEvent for Saga ID: {}", event.getSagaTransactionId());
+        logger.info("CAR RESERVATION CANCELLED SAGA ENDED ID: {}", event.getSagaTransactionId());
+    }
+
+
+
+
+
+    @KafkaHandler
+    public void handleBookingCreationFailedEvent(BookingCreationFailedEvent bookingCreationFailedEvent){
+        logger.info("Received BookingCreationFailedEvent for Saga ID: {}", bookingCreationFailedEvent.getSagaTransactionId());
+        //only one step at this point, so cancel the car reservation
+
+        CancelCarReservationCommand cancelCarReservationCommand = new CancelCarReservationCommand(bookingCreationFailedEvent.getSagaTransactionId(), bookingCreationFailedEvent.getBookingDto());
+        kafkaTemplate.send("rental-saga-inventory-commands", cancelCarReservationCommand);
+
+        logger.info("Sent cancelCarReservationCommand with Saga ID: {}", cancelCarReservationCommand.getSagaTransactionId());
+
     }
 }
