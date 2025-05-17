@@ -1,7 +1,6 @@
 pipeline{
-    agent{
-        label "Default"
-    }
+    agent any
+    
     tools {
         maven 'Maven3'
     }
