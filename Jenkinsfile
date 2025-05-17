@@ -3,7 +3,6 @@ pipeline{
         label "Default"
     }
     tools {
-        jdk 'Java17'
         maven 'Maven3'
     }
 
