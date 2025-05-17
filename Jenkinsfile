@@ -1,83 +1,84 @@
-pipeline{
-    agent{
-        label "Default"
-    }
+pipeline {
+    agent any
+
     tools {
-        jdk 'Java17'
         maven 'Maven3'
     }
 
-    environment{
-        APP_NAME= "vuttr"
+    environment {
+        APP_NAME = "car-rental-orchestrator"
         RELEASE = "1.0.0"
         DOCKER_USER = "gukami98"
-        DOCKER_PASS = "DOCKERHUB_LOGIN"
-        IMAGE_NAME =  "${DOCKER_USER}" + "/" + "${APP_NAME}"
-        IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}" 
+        DOCKER_PASS = credentials('DOCKERHUB_LOGIN')
+        IMAGE_NAME = "${DOCKER_USER}/${APP_NAME}"
+        IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}"
+        GCP_PROJECT  = 'voltaic-circuit-459820-q9'
+        GCP_ZONE     = 'us-central1-c'              
+        GCP_INSTANCE = 'instance-20250515-025034'
     }
 
-
-    stages{
-        stage("Cleanup Workspace"){
-            steps{
+    stages {
+        stage("Cleanup Workspace") {
+            steps {
                 cleanWs()
             }
         }
 
-        stage("Checkout from SCM"){
-            steps{
-                git branch: 'master', credentialsId: 'GITHUB_LOGIN', url: 'https://github.com/Guilherme-Vale-98/VUTTR-project'
-            }
-        }
-         stage("Prepare Configuration") {
+        stage("Checkout Common") {
             steps {
-                configFileProvider([configFile(fileId: 'config-1', targetLocation: 'src/main/resources/application.yml')]) {
-                   
+                git branch: 'main', credentialsId: 'GITHUB_LOGIN', url: 'https://github.com/myOrganization-GV/car-rental-common'
+            }
+        }
+        stage("Build Common Application") {
+            steps {
+                sh "mvn clean install -DskipTests"
+            }
+        }
+
+        stage("Checkout Orchestrator") {
+            steps {
+                git branch: 'main', credentialsId: 'GITHUB_LOGIN', url: 'https://github.com/myOrganization-GV/car-rental-orchestrator'
+            }
+        }
+        stage("Build Orchestrator Application") {
+            steps {
+                sh "mvn clean package -DskipTests"
+            }
+        }
+        stage("Build and Push Docker Image") {
+            steps {
+                script {
+                    def jarPath = "target/car-rental-orchestrator-0.0.1-SNAPSHOT.jar"
+                    if (!fileExists(jarPath)) {
+                        error "JAR file not found at ${jarPath}"
+                    }
+
+                    docker.withRegistry('https://index.docker.io/v1/', 'DOCKERHUB_LOGIN') {
+                        dockerImage = docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+                        dockerImage.push("${IMAGE_TAG}")
+                        dockerImage.push('latest')
+                    }
+
+                    sh "docker logout"
                 }
             }
         }
 
-        stage("Build Application"){
-            steps{
-                powershell "mvn clean package"
+        stage("Deploy to GCP VM") {
+            steps {
+               
+                withCredentials([file(credentialsId: 'GCP_SA_KEY', variable: 'KEYFILE')]) {
+                    sh '''
+                        gcloud auth activate-service-account --key-file=$KEYFILE --quiet
+                        gcloud config set project $GCP_PROJECT --quiet
+                        gcloud config set compute/zone $GCP_ZONE --quiet
+
+                        gcloud compute ssh gui_s@${GCP_INSTANCE} \\
+                        --zone=${GCP_ZONE} --quiet \\
+                        --command "cd ~/car-rental-app && docker compose pull car-rental-orchestrator && docker compose up -d --no-deps --force-recreate $APP_NAME"
+                    '''
+                }
             }
-        }
-
-        stage("Test Application"){
-            steps{
-                powershell "mvn test"
-            }
-        }
-
-        stage("Sonarqube Analysis"){
-            steps{
-                script{
-                withSonarQubeEnv(credentialsId: 'jenkins-sonaqube-token' ){
-                powershell "mvn sonar:sonar"
-                }
-            }}
-        }
-
-        stage("Quality Gate"){
-            steps{
-                script{
-                    waitForQualityGate abortPipeline: false, credentialsId: 'jenkins-sonaqube-token' 
-                }
-            }}
-        stage("Build & Push Docker Image"){
-            steps{
-                script{
-                   powershell 'docker context use default'
-
-                   docker.withRegistry('', DOCKER_PASS) {
-                    docker_image = docker.build "${IMAGE_NAME}"
-                   }
-                   docker.withRegistry('', DOCKER_PASS){
-                    docker_image.push("${IMAGE_TAG}")
-                    docker_image.push('latest')
-                   }
-
-                }
-            }}
         }
     }
+}

@@ -22,6 +22,6 @@ public class RentalController {
     @PostMapping("/rent/car")
     public ResponseEntity<String> rentCar(@RequestBody BookingDto bookingDto) {
         orchestratorService.startCarReservationSaga(bookingDto);
-        return new ResponseEntity<>("Car reservation saga initiated for car ID: " + bookingDto.getCarId(), HttpStatus.ACCEPTED);
+        return new ResponseEntity<>("NOW RUNNING FROM GOOGLE VM:Car reservation saga initiated for car ID: " + bookingDto.getCarId(), HttpStatus.ACCEPTED);
     }
 }
