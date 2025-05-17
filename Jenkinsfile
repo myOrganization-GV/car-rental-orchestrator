@@ -8,7 +8,7 @@ pipeline{
     }
 
     environment{
-        APP_NAME= "vuttr"
+        APP_NAME= "car-rental-orchestrator"
         RELEASE = "1.0.0"
         DOCKER_USER = "gukami98"
         DOCKER_PASS = "DOCKERHUB_LOGIN"
@@ -26,58 +26,13 @@ pipeline{
 
         stage("Checkout from SCM"){
             steps{
-                git branch: 'master', credentialsId: 'GITHUB_LOGIN', url: 'https://github.com/Guilherme-Vale-98/VUTTR-project'
+                git branch: 'main', credentialsId: 'GITHUB_LOGIN', url: 'https://github.com/myOrganization-GV/car-rental-orchestrator'
             }
         }
-         stage("Prepare Configuration") {
-            steps {
-                configFileProvider([configFile(fileId: 'config-1', targetLocation: 'src/main/resources/application.yml')]) {
-                   
-                }
-            }
-        }
-
         stage("Build Application"){
             steps{
-                powershell "mvn clean package"
+                sh "mvn clean package"
             }
         }
-
-        stage("Test Application"){
-            steps{
-                powershell "mvn test"
-            }
-        }
-
-        stage("Sonarqube Analysis"){
-            steps{
-                script{
-                withSonarQubeEnv(credentialsId: 'jenkins-sonaqube-token' ){
-                powershell "mvn sonar:sonar"
-                }
-            }}
-        }
-
-        stage("Quality Gate"){
-            steps{
-                script{
-                    waitForQualityGate abortPipeline: false, credentialsId: 'jenkins-sonaqube-token' 
-                }
-            }}
-        stage("Build & Push Docker Image"){
-            steps{
-                script{
-                   powershell 'docker context use default'
-
-                   docker.withRegistry('', DOCKER_PASS) {
-                    docker_image = docker.build "${IMAGE_NAME}"
-                   }
-                   docker.withRegistry('', DOCKER_PASS){
-                    docker_image.push("${IMAGE_TAG}")
-                    docker_image.push('latest')
-                   }
-
-                }
-            }}
-        }
+            
     }
