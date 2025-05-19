@@ -11,7 +11,7 @@ pipeline {
         DOCKER_USER = "gukami98"
         DOCKER_PASS = credentials('DOCKERHUB_LOGIN')
         IMAGE_NAME = "${DOCKER_USER}/${APP_NAME}"
-        IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}"
+        IMAGE_TAG = "latest"
         GCP_PROJECT  = 'voltaic-circuit-459820-q9'
         GCP_ZONE     = 'us-central1-c'              
         GCP_INSTANCE = 'instance-20250515-025034'
