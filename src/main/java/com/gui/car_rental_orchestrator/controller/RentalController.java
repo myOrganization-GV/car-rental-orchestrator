@@ -12,6 +12,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -38,16 +40,24 @@ public class RentalController {
     }
     @PostMapping("/rent/car")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    public ResponseEntity<String> rentCar(@RequestBody BookingDto bookingDto, Authentication auth) {
+    public ResponseEntity<Map<String, Object>> rentCar(@RequestBody BookingDto bookingDto, Authentication auth) {
         String userEmail = extractEmailFromAuth(auth);
-        if(userEmail == null){
+        if (userEmail == null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "User email not available in authentication token");
+                    "User email not available in authentication token"
+            );
         }
+
         bookingDto.setEmail(userEmail);
         orchestratorService.startCarReservationSaga(bookingDto);
-        return new ResponseEntity<>("Car reservation saga initiated for car ID: " + bookingDto.getCarId(), HttpStatus.ACCEPTED);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Car reservation saga initiated");
+        response.put("carId", bookingDto.getCarId());
+        response.put("userEmail", bookingDto.getEmail());
+
+        return ResponseEntity.accepted().body(response);
     }
     private String extractEmailFromAuth(Authentication auth){
         String email = null;
